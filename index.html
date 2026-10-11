@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Minecraft Web Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+    #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* HUD */
+    #hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; pointer-events: none; }
+    .hud-bar { width: 60px; height: 14px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; position: relative; }
+    .hud-fill { height: 100%; transition: width 0.2s; }
+    #health-bar .hud-fill { background: #ff4444; }
+    #hunger-bar .hud-fill { background: #ffaa00; }
+    #xp-bar .hud-fill { background: #33ccff; height: 8px; width: 100%; margin-top: 3px; }
+
+    /* Hotbar */
+    #hotbar { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; z-index: 10; pointer-events: none; }
+    .hotbar-slot { width: 48px; height: 48px; background: rgba(0,0,0,0.6); border: 2px solid #555; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-align: center; }
+    .hotbar-slot.selected { border-color: #fff; background: rgba(255,255,255,0.15); }
+
+    /* Crosshair */
+    #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; z-index: 10; pointer-events: none; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.8); }
+    #crosshair::before { top: 10px; left: 0; width: 24px; height: 4px; }
+    #crosshair::after { top: 0; left: 10px; width: 4px; height: 24px; }
+
+    /* Tooltip */
+    #tooltip { position: absolute; top: calc(50% + 20px); left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; z-index: 10; pointer-events: none; display: none; }
+
+    /* Inventory overlay */
+    #inventory-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,30,0.95); border: 2px solid #888; border-radius: 8px; padding: 16px; z-index: 100; display: none; }
+    .inv-grid { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; margin-bottom: 12px; }
+    .inv-slot { width: 48px; height: 48px; background: rgba(50,50,60,0.9); border: 2px solid #666; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-align: center; user-select: none; }
+    .inv-slot:hover { border-color: #aaa; }
+    .inv-slot.drag-over { background: rgba(80,80,100,0.9); }
+
+    /* Crafting overlay */
+    #crafting-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,30,0.95); border: 2px solid #888; border-radius: 8px; padding: 16px; z-index: 100; display: none; }
+    .craft-grid { display: grid; grid-template-columns: repeat(3, 48px); gap: 4px; margin-bottom: 12px; }
+    .craft-slot { width: 48px; height: 48px; background: rgba(50,50,60,0.9); border: 2px solid #666; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; }
+    .craft-result { width: 48px; height: 48px; background: rgba(50,50,60,0.9); border: 2px solid #888; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; }
+    .craft-label { text-align: center; color: #aaa; font-size: 12px; margin-bottom: 8px; }
+
+    /* Toast notifications */
+    #toast-container { position: absolute; top: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 6px; }
+    .toast { background: rgba(30,30,40,0.9); color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 13px; animation: slideIn 0.3s ease-out; border-left: 4px solid #33ccff; }
+    .toast.achievement { border-left-color: #ffd700; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Pause menu */
+    #pause-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,30,0.95); border: 2px solid #888; border-radius: 12px; padding: 32px; z-index: 300; display: none; text-align: center; }
+    #pause-menu h2 { color: #fff; margin-bottom: 16px; font-size: 24px; }
+    #pause-menu button { display: block; width: 200px; margin: 8px auto; padding: 10px; background: rgba(50,50,70,0.9); color: #fff; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    #pause-menu button:hover { background: rgba(80,80,100,0.9); border-color: #aaa; }
+
+    /* Loading screen */
+    #loading-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 18px; z-index: 400; text-align: center; }
+
+    /* FPS counter */
+    #fps-counter { position: absolute; top: 10px; left: 10px; color: rgba(255,255,255,0.6); font-size: 11px; z-index: 10; pointer-events: none; }
+
+    /* Biome indicator */
+    #biome-indicator { position: absolute; top: 10px; right: 10px; color: rgba(255,255,255,0.7); font-size: 12px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; z-index: 10; pointer-events: none; }
+
+    /* Time indicator */
+    #time-indicator { position: absolute; top: 36px; right: 10px; color: rgba(255,255,255,0.7); font-size: 12px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; z-index: 10; pointer-events: none; }
+
+    /* Parkour mode indicator */
+    #parkour-indicator { position: absolute; top: 62px; right: 10px; color: rgba(255,200,0,0.9); font-size: 13px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; z-index: 10; pointer-events: none; display: none; }
+
+    /* Weather overlay */
+    #rain-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; opacity: 0.3; background: repeating-linear-gradient(45deg, transparent 0px, transparent 8px, rgba(180,200,255,0.1) 8px, rgba(180,200,255,0.1) 10px); }
+
+    /* Touch controls (mobile) */
+    #touch-controls { position: absolute; bottom: 10px; left: 10px; z-index: 50; display: none; }
+    .joy-stick-area { width: 120px; height: 120px; background: rgba(0,0,0,0.3); border-radius: 50%; position: relative; }
+    .joy-stick-thumb { width: 40px; height: 40px; background: rgba(255,255,255,0.5); border-radius: 50%; position: absolute; top: 40px; left: 40px; }
+    .touch-btn { position: absolute; width: 60px; height: 60px; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+
+    /* Block selector (creative mode) */
+    #block-selector { position: absolute; top: 10%; right: 10px; background: rgba(20,20,30,0.9); border: 1px solid #666; border-radius: 8px; padding: 8px; z-index: 50; display: none; max-height: 70vh; overflow-y: auto; }
+    .block-option { width: 40px; height: 40px; margin: 3px; cursor: pointer; border-radius: 4px; border: 2px solid #555; display: inline-block; vertical-align: middle; position: relative; }
+    .block-option.selected { border-color: #fff; }
+    .block-option span { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 8px; color: rgba(255,255,255,0.7); white-space: nowrap; }
+
+    /* Parkour HUD */
+    #parkour-hud { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 8px 16px; border-radius: 6px; font-size: 14px; z-index: 10; display: none; }
+
+    /* Buff indicator */
+    #buff-indicator { position: absolute; top: 88px; right: 10px; color: rgba(100,255,100,0.9); font-size: 12px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; z-index: 10; pointer-events: none; display: none; }
+
+    /* Parkour timer */
+    #parkour-timer { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #fff; padding: 8px 20px; border-radius: 6px; font-size: 16px; z-index: 10; display: none; }
+
+    /* Parkour progress */
+    #parkour-progress { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 4px 16px; border-radius: 4px; font-size: 12px; z-index: 10; display: none; }
+
+    /* Parkour results */
+    #parkover-results { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,30,0.95); border: 2px solid #888; border-radius: 12px; padding: 32px; z-index: 300; display: none; text-align: center; color: #fff; }
+    #parkour-results h2 { margin-bottom: 16px; font-size: 24px; color: #ffd700; }
+    #parkour-results button { padding: 10px 24px; background: rgba(50,50,70,0.9); color: #fff; border: 1px solid #666; border-radius: 4px; cursor: pointer; font-size: 14px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-bar" id="health-bar"><div class="hud-fill" style="width:100%"></div></div>
+    <div class="hud-bar" id="hunger-bar"><div class="hud-fill" style="width:100%"></div></div>
+  </div>
+  <div class="hud-bar" id="xp-bar" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;"><div class="hud-fill" style="width:0%"></div></div>
+
+  <!-- Hotbar -->
+  <div id="hotbar"></div>
+
+  <!-- Crosshair & Tooltip -->
+  <div id="crosshair"></div>
+  <div id="tooltip"></div>
+
+  <!-- Inventory overlay -->
+  <div id="inventory-overlay">
+    <div class="craft-label">Inventory (27 slots)</div>
+    <div class="inv-grid" id="chest-grid"></div>
+    <div class="craft-label">Hotbar</div>
+    <div class="inv-grid" id="hotbar-inv-grid" style="grid-template-columns:repeat(9,48px)"></div>
+  </div>
+
+  <!-- Crafting overlay -->
+  <div id="crafting-overlay">
+    <div class="craft-label">Crafting Table</div>
+    <div class="craft-grid" id="craft-input-grid"></div>
+    <div class="craft-result" id="craft-result-slot"></div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container"></div>
+
+  <!-- Pause menu -->
+  <div id="pause-menu">
+    <h2>⏸ Paused</h2>
+    <button onclick="game.saveWorld()">💾 Save World (F5)</button>
+    <button onclick="game.loadWorld()">📂 Load World (F6)</button>
+    <button onclick="game.startParkourMode()">🏃 Parkour Mode (P)</button>
+    <button id="toggle-creative-btn" onclick="game.toggleCreativeMode()">🧱 Creative / Survival</button>
+    <button onclick="document.getElementById('pause-menu').style.display='none'">▶ Resume</button>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading-screen">
+    <p>⛏ Generating World...</p>
+    <p style="font-size:12px;margin-top:8px;opacity:0.6">Please wait — terrain is being generated</p>
+  </div>
+
+  <!-- FPS counter -->
+  <div id="fps-counter">FPS: --</div>
+
+  <!-- Biome indicator -->
+  <div id="biome-indicator">Biome: Plains</div>
+
+  <!-- Time indicator -->
+  <div id="time-indicator">☀ Day — 06:00</div>
+
+  <!-- Parkour mode indicators -->
+  <div id="parkour-indicator">🏃 PARKOUR MODE ACTIVE</div>
+  <div id="parkour-timer"></div>
+  <div id="parkour-progress"></div>
+
+  <!-- Buff indicator -->
+  <div id="buff-indicator"></div>
+
+  <!-- Parkover results -->
+  <div id="parkover-results">
+    <h2>🏆 Parkour Complete!</h2>
+    <p id="parkour-score" style="font-size:18px;margin-top:8px;"></p>
+    <button onclick="game.endParkourMode()">Back to World</button>
+  </div>
+
+  <!-- Block selector (creative) -->
+  <div id="block-selector"></div>
+
+  <!-- Rain overlay -->
+  <div id="rain-overlay" style="display:none"></div>
+
+  <!-- Touch controls (mobile only) -->
+  <div id="touch-controls">
+    <div class="joy-stick-area" id="joystick">
+      <div class="joy-stick-thumb" id="thumb"></div>
+    </div>
+    <div class="touch-btn" style="bottom:130px;right:20px;left:auto" id="jump-btn">JUMP</div>
+    <div class="touch-btn" style="bottom:70px;right:90px;left:auto" id="place-btn">PLACE</div>
+    <div class="touch-btn" style="bottom:10px;right:90px;left:auto" id="break-btn">BREAK</div>
+  </div>
+
+  <!-- Three.js from CDN (no npm install needed for basic play) -->
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js" } }
+  </script>
+
+  <!-- Game modules (ES modules loaded from src/) -->
+  <script type="module">
+    import './src/main.js';
+  </script>
+</body>
+</html>

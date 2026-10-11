@@ -1,0 +1,12 @@
+{
+  "name": "minecraft-3d-webgame",
+  "version": "1.0.0",
+  "description": "Minecraft-inspired 3D voxel game built with Three.js",
+  "type": "module",
+  "scripts": {
+    "start": "http-server . -p 8080"
+  },
+  "dependencies": {
+    "three": "^0.162.0"
+  }
+}

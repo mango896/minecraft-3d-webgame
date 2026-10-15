@@ -633,8 +633,9 @@
         const dt = Math.min(delta, 0.05);
         this._movement(dt);
         this.inWater = false;
-        if (this.flyMode) { this._flyPhysics(dt); } else { this._physics(dt); this._resolveCollision(dt); }
-        this._checkWater(dt);
+        if (this.flyMode) { this._flyPhysics(dt); } else { this._physics(dt); }
+        this._waterCollision();
+        if (!this.flyMode) this._resolveCollision(dt);
         this._updateCamera();
       }
       _movement(dt) {
@@ -652,33 +653,46 @@
         if (move.length() > 0) { move.normalize(); this.velocity.x = move.x * spd; this.velocity.z = move.z * spd; }
         else { this.velocity.x *= 0.82; this.velocity.z *= 0.82; }
       }
-      _physics(dt) { this.velocity.y += this.gravity * dt; }
-      _checkWater(dt) {
-        // Check if player is in the water layer (below terrain but above bedrock)
-        const px = Math.floor(this.position.x);
-        const pz = Math.floor(this.position.z);
-        const feetY = Math.floor(this.position.y);
-        const headY = Math.floor(this.position.y + this.height);
+      _waterCollision() {
+        if (this.flyMode) return;
+        const feetY = this.position.y;
+        const headY = this.position.y + this.height;
         
-        // Check feet block: if it's at or below water level but not bedrock/terrain
-        let belowFeetSolid = false;
-        for (let cy = feetY; cy >= 0; cy--) {
-          const b = this.world.getBlock(px, cy, pz);
-          if (b !== BLOCK_TYPES.AIR) { belowFeetSolid = true; break; }
-        }
-        
-        // If player's feet are in the water zone (y between bedrock and water level) and there's solid ground below
-        if (belowFeetSolid && feetY >= 2 && feetY <= WATER_LEVEL) {
-          this.inWater = true;
-          // Slow fall — apply upward drag to counter gravity
-          this.velocity.y *= (1 - 2.5 * dt);
-          // Reduce gravity effect
-          if (this.velocity.y < 0) this.velocity.y = Math.min(this.velocity.y, -2 * dt);
-          // Water drag on horizontal movement
-          this.velocity.x *= (1 - 3 * dt);
-          this.velocity.z *= (1 - 3 * dt);
+        // Case 1: Player is inside the water zone (between bedrock and water surface)
+        // and their feet are on a non-AIR block (terrain below water surface)
+        if (feetY >= 2 && feetY <= WATER_LEVEL) {
+          const feetBlock = this.world.getBlock(Math.floor(this.position.x), Math.floor(feetY), Math.floor(this.position.z));
+          const aboveFeetBlock = this.world.getBlock(Math.floor(this.position.x), Math.floor(feetY) + 1, Math.floor(this.position.z));
+          
+          if (feetBlock !== BLOCK_TYPES.AIR && aboveFeetBlock === BLOCK_TYPES.AIR) {
+            // Standing on terrain WITH water mesh above — player is in water
+            this.inWater = true;
+            // Push player up to water surface
+            this.position.y = WATER_LEVEL - 0.15;
+            this.velocity.y = 0;
+            this.onGround = false;
+            // Water drag
+            this.velocity.x *= 0.6;
+            this.velocity.z *= 0.6;
+            this.speed = 3.0;
+            return;
+          }
+          
+          // Case 2: Player's feet are in an AIR block (water mesh) while falling
+          // Push them up to the water surface
+          if (feetBlock === BLOCK_TYPES.AIR && this.velocity.y <= 0) {
+            this.inWater = true;
+            this.position.y = WATER_LEVEL - 0.15;
+            this.velocity.y = 0;
+            this.onGround = false;
+            this.velocity.x *= 0.6;
+            this.velocity.z *= 0.6;
+            this.speed = 3.0;
+            return;
+          }
         }
       }
+      _physics(dt) { this.velocity.y += this.gravity * dt; }
       _flyPhysics(dt) {
         if (!this.flyMode) return;
         const flyUp = this.keys['Space'] ? 1 : (this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? -1 : 0);
